@@ -30,10 +30,10 @@
     "chat"
   ],
   "license": "MIT",
-  "author": "",
+  "author": "jacksixth",
   "repository": {
     "type": "git",
-    "url": "https://github.com/tangqingfeng7/Oopzbot-SDK"
+    "url": "https://github.com/jacksixth/oopz-sdk"
   },
   "engines": {
     "node": ">=18"
