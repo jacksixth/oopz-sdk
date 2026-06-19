@@ -41,7 +41,8 @@ jobs:
             VERSION="${GITHUB_REF#refs/tags/v}"
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
+      - name: Sync version to package.json
+        run: npm version ${{ steps.version.outputs.version }} --no-git-tag-version
       - name: Package
         run: npm pack
 
