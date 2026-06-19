@@ -1,24 +1,18 @@
-name: Build & Release
+name: Release
 
 on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "版本号（如 0.1.0，留空则使用 tag）"
-        required: false
 
 permissions:
-  contents: write
+  contents: read
   id-token: write
 
 jobs:
-  build-and-release:
+  publish:
     runs-on: ubuntu-latest
-    env:
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,58 +20,36 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          registry-url: "https://registry.npmjs.org"
+          node-version: 22
+          registry-url: https://registry.npmjs.org
 
-      - name: Install dependencies
-        run: npm install
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
+      - name: Show versions
+        run: |
+          node -v
+          npm -v
+
+      - name: Install
+        run: npm ci
+
+      - name: Get version from tag
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          npm version "$VERSION" --no-git-tag-version
+
+      - name: Verify package
+        run: |
+          cat package.json
+          npm pkg get name
+          npm pkg get version
 
       - name: Build
         run: npm run build
 
-      - name: Get version
-        id: version
-        run: |
-          VERSION="${{ github.event.inputs.version }}"
-          if [ -z "$VERSION" ]; then
-            # 从 tag 提取版本号（仅 tag push 触发时有效）
-            VERSION="${GITHUB_REF#refs/tags/v}"
-          fi
-          # workflow_dispatch 未填 version 且无 tag 时，报错退出
-          if [ -z "$VERSION" ] || [ "$VERSION" = "$GITHUB_REF" ]; then
-            echo "::error::未提供版本号，请通过 workflow_dispatch 输入 version 或推送 v* 标签"
-            exit 1
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-      - name: Sync version to package.json
-        run: npm version ${{ steps.version.outputs.version }} --no-git-tag-version
-      - name: Package
+      - name: Pack
         run: npm pack
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: v${{ steps.version.outputs.version }}
-          tag_name: v${{ steps.version.outputs.version }}
-          generate_release_notes: true
-          files: |
-            oopz-sdk-${{ steps.version.outputs.version }}.tgz
-            
-      - name: Debug npm publish
-        run: |
-          echo "===== PACKAGE ====="
-          cat package.json
-
-          echo "===== NAME ====="
-          npm pkg get name
-
-          echo "===== VERSION ====="
-          npm pkg get version
-
-          echo "===== PACKAGE EXISTS ====="
-          npm view oopz-sdk version
-
-          echo "===== WHOAMI ====="
-          npm whoami
       - name: Publish to npm
         run: npm publish --provenance --access public
