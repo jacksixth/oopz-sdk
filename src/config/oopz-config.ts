@@ -114,7 +114,7 @@ export class OopzConfig {
     this.agoraAppId = options.agoraAppId ?? DEFAULT_AGORA_APP_ID;
 
     this.ignoreSelfMessages = options.ignoreSelfMessages ?? true;
-    this.autoSubscribeJoinedAreas = options.autoSubscribeJoinedAreas ?? true;
+    this.autoSubscribeJoinedAreas = options.autoSubscribeJoinedAreas ?? false;
 
     this.request = options.request ?? {};
     this.retry = { ...DEFAULT_RETRY, ...options.retry };

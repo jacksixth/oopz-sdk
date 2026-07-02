@@ -237,6 +237,9 @@ setupLogging("DEBUG");
 | `server_id` | 服务端 ID 分配 | `ServerIdEvent` |
 | `*` | 通配符，匹配所有事件 | `AnyEvent` |
 
+*** 若需要 `voice` 系列事件，需要在`config`中将`autoSubscribeJoinedAreas`置为`true`，这将在初始化时就订阅所有已加入域的事件。 ***
+*** 若是只想订阅已加入的部分域，请使用`bot.ws.sendSubscribeAreaEvents(areaIds)`订阅指定区域的事件 ***
+
 ---
 
 ## 🧩 Service 列表
@@ -301,9 +304,9 @@ const config = new OopzConfig({
   areaChannelsCacheTtl: 60,
 
   // ── 机器人行为 ──
-  ignoreSelfMessages: true,
-  autoSubscribeJoinedAreas: true,
-  useAnnouncementStyle: false,
+  ignoreSelfMessages: true,//忽略机器人自身发言  -- 可能无效
+  autoSubscribeJoinedAreas: false,//是否自动订阅已加入域的事件 
+  useAnnouncementStyle: false,//发言是否使用公告样式
 
 });
 ```
