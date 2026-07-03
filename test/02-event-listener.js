@@ -88,8 +88,8 @@ bot.on("member.leave", (event) => {
 
 // ── 语音事件 ──
 
-bot.on("voice.join", (event) => {
-  console.log(`[voice.join]       用户进入语音频道`);
+bot.on("voice.enter", (event) => {
+  console.log(`[voice.enter]       用户进入语音频道`);
 });
 
 bot.on("voice.leave", (event) => {
@@ -141,7 +141,7 @@ async function main() {
   console.log("  撤回类: recall, recall.private");
   console.log("  频道类: channel.join, channel.leave, channel.update");
   console.log("  成员类: member.join, member.leave");
-  console.log("  语音类: voice.join, voice.leave");
+  console.log("  语音类: voice.enter, voice.leave");
   console.log("  身份组: role.update");
   console.log("  好友类: friend.request, friend.accept");
   console.log("  系统类: server_id, unknown, *");

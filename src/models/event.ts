@@ -5,7 +5,7 @@ import type { Message } from "./message";
 
 /** 所有 Oopz 事件的基类。 */
 export interface Event {
-  /** SDK 事件名（如 "message"、"recall"、"voice.join"）。 */
+  /** SDK 事件名（如 "message"、"recall"、"voice.enter"）。 */
   eventName: string;
   /** 原始 Oopz 事件码。 */
   eventCode: number;

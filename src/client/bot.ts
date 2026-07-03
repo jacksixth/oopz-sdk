@@ -135,7 +135,7 @@ export class OopzBot {
    * - `"recall.private"` — 私聊消息被撤回
    * - `"channel.join"` / `"channel.leave"` — 频道加入/离开
    * - `"member.join"` / `"member.leave"` — 成员加入/离开
-   * - `"voice.join"` / `"voice.leave"` — 语音频道加入/离开
+   * - `"voice.enter"` / `"voice.leave"` — 语音频道加入/离开
    * - `"role.update"` — 身份组更新
    * - `"friend.request"` / `"friend.accept"` — 好友事件
    * - `"*"` — 通配符，匹配所有事件
