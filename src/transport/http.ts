@@ -1,5 +1,6 @@
 import * as http from "node:http";
 import * as https from "node:https";
+import * as zlib from "node:zlib";
 import { OopzConfig } from "../config";
 import { Signer, buildOopzApiHeaders } from "../auth";
 import { DEFAULT_HEADERS } from "../config/constants";
@@ -172,12 +173,38 @@ export class HttpTransport {
               for (const [k, v] of Object.entries(res.headers)) {
                 if (v) h[k] = Array.isArray(v) ? (v as string[]).join(", ") : v as string;
               }
-              resolve({
-                status: res.statusCode ?? 500,
-                statusText: res.statusMessage ?? "",
-                headers: h,
-                data: Buffer.concat(chunks).toString("utf-8"),
-              });
+
+              const rawBuffer = Buffer.concat(chunks);
+              const encoding = (h["content-encoding"] || "").toLowerCase();
+
+              const finalize = (data: string) => {
+                resolve({
+                  status: res.statusCode ?? 500,
+                  statusText: res.statusMessage ?? "",
+                  headers: h,
+                  data,
+                });
+              };
+
+              if (encoding === "gzip" || encoding === "x-gzip") {
+                zlib.gunzip(rawBuffer, (err, decoded) => {
+                  if (err) {
+                    finalize(rawBuffer.toString("utf-8"));
+                  } else {
+                    finalize(decoded.toString("utf-8"));
+                  }
+                });
+              } else if (encoding === "deflate") {
+                zlib.inflate(rawBuffer, (err, decoded) => {
+                  if (err) {
+                    finalize(rawBuffer.toString("utf-8"));
+                  } else {
+                    finalize(decoded.toString("utf-8"));
+                  }
+                });
+              } else {
+                finalize(rawBuffer.toString("utf-8"));
+              }
             });
           });
           req.on("error", reject);
