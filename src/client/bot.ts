@@ -1,6 +1,7 @@
 import { OopzConfig } from "../config";
 import { OopzRESTClient } from "./rest";
 import { OopzWSClient } from "./ws";
+import { sdkLog } from "../logger";
 import type { EventHandler, EventParser } from "../events";
 import type { AnyEvent } from "../models/event";
 import type { Message as MessageService } from "../services/message";
@@ -117,7 +118,7 @@ export class OopzBot {
       if (areaIds.length === 0) return;
 
       await this.ws.sendSubscribeAreaEvents(areaIds);
-      console.log(`[oopz-sdk:bot] 已订阅 ${areaIds.length} 个区域的事件`);
+      sdkLog(`[oopz-sdk:bot] 已订阅 ${areaIds.length} 个区域的事件`);
     } catch (err) {
       console.error("[oopz-sdk:bot] 订阅区域事件失败:", (err as Error).message);
     }

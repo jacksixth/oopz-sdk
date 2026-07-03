@@ -1,3 +1,4 @@
+import { setSdkDebug } from "../logger";
 import {
   OopzConfigOptions,
   RequestConfig,
@@ -74,6 +75,9 @@ export class OopzConfig {
   ignoreSelfMessages: boolean;
   autoSubscribeJoinedAreas: boolean;
 
+  // 调试
+  debug: boolean;
+
   // 子配置
   request: RequestConfig;
   retry: Required<RetryConfig>;
@@ -115,6 +119,9 @@ export class OopzConfig {
 
     this.ignoreSelfMessages = options.ignoreSelfMessages ?? true;
     this.autoSubscribeJoinedAreas = options.autoSubscribeJoinedAreas ?? false;
+
+    this.debug = options.debug ?? false;
+    setSdkDebug(this.debug);
 
     this.request = options.request ?? {};
     this.retry = { ...DEFAULT_RETRY, ...options.retry };

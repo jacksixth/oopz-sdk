@@ -3,6 +3,7 @@ import { HeartbeatConfig } from "../config/settings";
 import { EVENT_AUTH, EVENT_HEARTBEAT, EVENT_SUBSCRIBE_AREA_EVENTS } from "../config/constants";
 import { WebSocketTransport, WebSocketClosedError } from "../transport";
 import { EventDispatcher } from "../events";
+import { sdkLog } from "../logger";
 import type { EventHandler } from "../events";
 import type { AnyEvent } from "../models/event";
 import type { JsonObject } from "../models/base";
@@ -208,7 +209,7 @@ export class OopzWSClient {
       event: EVENT_AUTH,
     };
 
-    console.log("[oopz-sdk:ws] → 发送认证 (event=253)");
+    sdkLog("[oopz-sdk:ws] → 发送认证 (event=253)");
     await this.transport.sendJson(authMsg);
   }
 
@@ -231,7 +232,7 @@ export class OopzWSClient {
       event: EVENT_SUBSCRIBE_AREA_EVENTS,
     };
 
-    console.log(`[oopz-sdk:ws] → 订阅区域事件: ${cleanAreas.join(", ")} (event=249)`);
+    sdkLog(`[oopz-sdk:ws] → 订阅区域事件: ${cleanAreas.join(", ")} (event=249)`);
     await this.transport.sendJson(msg);
   }
 
@@ -303,7 +304,7 @@ export class OopzWSClient {
             const inner = JSON.parse(bodyRaw);
             if (typeof inner["checkRes"] === "boolean") {
               if (inner["checkRes"]) {
-                console.log("[oopz-sdk:ws] ✅ 认证通过!");
+                sdkLog("[oopz-sdk:ws] ✅ 认证通过!");
               } else {
                 console.error("[oopz-sdk:ws] ❌ 认证失败! 请检查 deviceId、personUid、jwtToken 是否正确。");
               }

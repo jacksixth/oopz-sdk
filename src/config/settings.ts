@@ -99,4 +99,7 @@ export interface OopzConfigOptions {
   heartbeat?: HeartbeatConfig;
   /** 代理配置。 */
   proxy?: ProxyConfig;
+
+  /** 是否启用调试日志（非 error 的 console.log 输出）。默认 false。 */
+  debug?: boolean;
 }

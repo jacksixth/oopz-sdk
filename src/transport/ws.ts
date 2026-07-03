@@ -1,6 +1,7 @@
 import WebSocket = require("ws");
 import { OopzConfig } from "../config";
 import { OopzConnectionError } from "../exceptions";
+import { sdkLog } from "../logger";
 import type { JsonObject } from "../models";
 
 /**
@@ -59,7 +60,7 @@ export class WebSocketTransport {
       "x-oopz-platform": this.config.platform,
     };
 
-    console.log("[oopz-sdk:ws] 正在连接:", url);
+    sdkLog("[oopz-sdk:ws] 正在连接:", url);
 
     this.ws = new WebSocket(url, { headers });
     this.closeInfo = null;
@@ -67,7 +68,7 @@ export class WebSocketTransport {
     // 持久 close 监听：确保 recv() 间隙的关闭也能捕获
     this.ws.on("close", (code: number, reason: Buffer) => {
       const reasonStr = reason.toString("utf-8") || "(无)";
-      console.log(`[oopz-sdk:ws] ❌ WebSocket 关闭: code=${code}, reason=${reasonStr}`);
+      sdkLog(`[oopz-sdk:ws] ❌ WebSocket 关闭: code=${code}, reason=${reasonStr}`);
       this.closeInfo = { code, reason: reasonStr };
     });
 
@@ -82,7 +83,7 @@ export class WebSocketTransport {
 
       this.ws.on("open", () => {
         clearTimeout(timeout);
-        console.log("[oopz-sdk:ws] ✅ WebSocket 已连接:", url);
+        sdkLog("[oopz-sdk:ws] ✅ WebSocket 已连接:", url);
         resolve();
       });
 

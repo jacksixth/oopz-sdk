@@ -24,7 +24,7 @@
 export { __version__ } from "./version";
 
 // 日志
-export { setupLogging, SDK_LOGGER_NAME } from "./logger";
+export { setupLogging, SDK_LOGGER_NAME, sdkLog, setSdkDebug } from "./logger";
 
 // 配置
 export {
