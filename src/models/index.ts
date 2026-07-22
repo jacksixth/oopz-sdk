@@ -51,7 +51,7 @@ export type {
   UserRemarkNamesResponse,
 } from "./person";
 
-export type { TextMuteInterval, VoiceMuteInterval } from "./moderation";
+export { TextMuteInterval, VoiceMuteInterval } from "./moderation";
 
 export type {
   Event,

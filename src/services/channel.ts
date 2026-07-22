@@ -30,15 +30,16 @@ export class Channel extends BaseService {
       const result = await this.transport.get<JsonObject>(
         `/area/v3/channel/setting/info?${params}`
       );
+      const data = (result["data"] || result) as JsonObject;
       return {
-        channelId: (result["channelId"] || channelId) as string,
-        areaId: (result["areaId"] || areaId) as string,
-        name: (result["name"] || "") as string,
-        type: (result["type"] || 0) as ChannelType,
-        groupId: result["groupId"] as string | undefined,
-        position: result["position"] as number | undefined,
-        topic: result["topic"] as string | undefined,
-        isPrivate: result["isPrivate"] as boolean | undefined,
+        channelId: (data["channelId"] || channelId) as string,
+        areaId: (data["areaId"] || areaId) as string,
+        name: (data["name"] || "") as string,
+        type: (data["type"] || 0) as ChannelType,
+        groupId: data["groupId"] as string | undefined,
+        position: data["position"] as number | undefined,
+        topic: data["topic"] as string | undefined,
+        isPrivate: data["isPrivate"] as boolean | undefined,
       };
     } catch {
       return null;
@@ -46,26 +47,29 @@ export class Channel extends BaseService {
   }
 
   /**
-   * 列出区域内的频道。
+   * 列出区域内的所有频道（扁平列表，对齐 Python get_area_channels 后展平）。
+   * 注意：API 返回频道分组，本方法将其展平为 ChannelSetting 列表。
    */
   async listChannels(areaId: string): Promise<ChannelSetting[]> {
     this.requireParam(areaId, "areaId");
 
-    const params = new URLSearchParams({ area: areaId });
-    const result = await this.transport.get<JsonObject>(
-      `/client/v1/area/v1/detail/v1/channels?${params}`
-    );
-    const channels = (result["channels"] || result["data"] || []) as JsonObject[];
-    return channels.map((c) => ({
-      channelId: (c["channelId"] || c["id"] || "") as string,
-      areaId: (c["areaId"] || areaId) as string,
-      name: (c["name"] || "") as string,
-      type: (c["type"] || 0) as ChannelType,
-      groupId: c["groupId"] as string | undefined,
-      position: c["position"] as number | undefined,
-      topic: c["topic"] as string | undefined,
-      isPrivate: c["isPrivate"] as boolean | undefined,
-    }));
+    const groups = await this.owner.areas.getAreaChannels(areaId);
+    const result: ChannelSetting[] = [];
+    for (const g of groups) {
+      for (const ch of g.channels) {
+        result.push({
+          channelId: ch.channelId,
+          areaId: ch.areaId,
+          name: ch.name,
+          type: ch.type === "VOICE" || ch.type === "AUDIO" ? ChannelType.VOICE : ChannelType.TEXT,
+          groupId: ch.groupId,
+          position: ch.number,
+          topic: undefined,
+          isPrivate: ch.secret,
+        });
+      }
+    }
+    return result;
   }
 
   /**
@@ -142,10 +146,11 @@ export class Channel extends BaseService {
     };
 
     const result = await this.transport.post<JsonObject>("/client/v1/area/v1/channel/v1/create", body);
+    const data = (result["data"] || result) as JsonObject;
     return {
-      channelId: (result["channelId"] || result["id"] || "") as string,
-      name: (result["name"] || name) as string,
-      type: (result["type"] || type) as ChannelType,
+      channelId: (data["channelId"] || data["id"] || "") as string,
+      name: (data["name"] || name) as string,
+      type: (data["type"] || type) as ChannelType,
     };
   }
 

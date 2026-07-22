@@ -44,10 +44,11 @@ export class Media extends BaseService {
     };
 
     const result = await this.transport.put<JsonObject>("/rtc/v1/cos/v1/signedUploadUrl", body);
+    const data = (result["data"] || result) as JsonObject;
     return {
-      ticket: (result["ticket"] || "") as string,
-      uploadUrl: (result["uploadUrl"] || result["upload_url"] || "") as string,
-      fileKey: (result["fileKey"] || result["file_key"] || "") as string,
+      ticket: (data["ticket"] || "") as string,
+      uploadUrl: (data["uploadUrl"] || data["upload_url"] || "") as string,
+      fileKey: (data["fileKey"] || data["file_key"] || "") as string,
     };
   }
 

@@ -57,13 +57,14 @@ export class Person extends BaseService {
       const result = await this.transport.get<JsonObject>(
         `/client/v1/person/v2/selfDetail?${params}`
       );
+      const data = (result["data"] || result) as JsonObject;
       return {
-        uid: (result["uid"] || uid) as string,
-        nickname: (result["nickname"] || "") as string,
-        avatar: result["avatar"] as string | undefined,
-        bio: result["bio"] as string | undefined,
-        gender: result["gender"] as number | undefined,
-        birthday: result["birthday"] as string | undefined,
+        uid: (data["uid"] || uid) as string,
+        nickname: (data["nickname"] || "") as string,
+        avatar: data["avatar"] as string | undefined,
+        bio: data["bio"] as string | undefined,
+        gender: data["gender"] as number | undefined,
+        birthday: data["birthday"] as string | undefined,
       };
     } catch {
       return null;
@@ -91,7 +92,8 @@ export class Person extends BaseService {
   async getFriendRequests(): Promise<FriendshipRequest[]> {
     try {
       const result = await this.transport.get<JsonObject>("/client/v1/friendship/v1/requests");
-      const requests = (result["requests"] || result["data"] || []) as JsonObject[];
+      const data = (result["data"] || result) as JsonObject;
+      const requests = (data["requests"] || []) as JsonObject[];
       return requests.map((r) => ({
         requestId: (r["requestId"] || r["friendRequestId"] || r["id"] || "") as string,
         fromUid: (r["fromUid"] || r["person"] || "") as string,
@@ -156,12 +158,17 @@ export class Person extends BaseService {
     }
   }
 
-  /** 获取备注名。 */
-  async getRemarks(): Promise<UserRemarkNamesResponse | null> {
+  /** 获取备注名（对齐 Python get_person_remark_name）。 */
+  async getRemarks(uid?: string): Promise<UserRemarkNamesResponse | null> {
     try {
-      const result = await this.transport.get<JsonObject>("/person/v1/remarkName/getUserRemarkNames");
+      const targetUid = uid || this.config.personUid;
+      const params = new URLSearchParams({ uid: targetUid });
+      const result = await this.transport.get<JsonObject>(
+        `/person/v1/remarkName/getUserRemarkNames?${params}`
+      );
+      const data = (result["data"] || result) as JsonObject;
       return {
-        remarks: (result["remarks"] || result || {}) as Record<string, string>,
+        remarks: (data["remarks"] || {}) as Record<string, string>,
       };
     } catch {
       return null;

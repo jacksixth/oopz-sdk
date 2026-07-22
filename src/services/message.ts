@@ -68,9 +68,10 @@ export class Message extends BaseService {
 
     const body = { message: messagePayload };
     const result = await this.transport.post<JsonObject>("/im/session/v2/sendGimMessage", body);
+    const data = (result["data"] || result) as JsonObject;
     return {
-      messageId: (result["messageId"] || result["message_id"] || "") as string,
-      timestamp: (result["timestamp"] || result["time"] || "") as string,
+      messageId: (data["messageId"] || data["message_id"] || "") as string,
+      timestamp: (data["timestamp"] || data["time"] || "") as string,
     };
   }
 
@@ -172,9 +173,10 @@ export class Message extends BaseService {
 
     const body = { message: messagePayload };
     const result = await this.transport.post<JsonObject>("/im/session/v2/sendImMessage", body);
+    const data = (result["data"] || result) as JsonObject;
     return {
-      messageId: (result["messageId"] || result["message_id"] || "") as string,
-      timestamp: (result["timestamp"] || result["time"] || "") as string,
+      messageId: (data["messageId"] || data["message_id"] || "") as string,
+      timestamp: (data["timestamp"] || data["time"] || "") as string,
     };
   }
 
@@ -201,7 +203,8 @@ export class Message extends BaseService {
       `/im/session/v2/messageBefore?${params.toString()}`
     );
 
-    const messages = (result["messages"] || result["data"] || []) as JsonObject[];
+    const data = (result["data"] || result) as JsonObject;
+    const messages = (data["messages"] || []) as JsonObject[];
     return messages.map((m) => ({
       messageId: (m["messageId"] || m["id"] || "") as string,
       senderUid: (m["senderUid"] || m["senderId"] || "") as string,
@@ -216,7 +219,8 @@ export class Message extends BaseService {
 
   async getPrivateSessions(): Promise<PrivateSession[]> {
     const result = await this.transport.get<JsonObject>("/api/message/private/list");
-    const sessions = (result["sessions"] || result["data"] || []) as JsonObject[];
+    const data = (result["data"] || result) as JsonObject;
+    const sessions = (data["sessions"] || []) as JsonObject[];
     return sessions.map((s) => ({
       uid: (s["uid"] || "") as string,
       sessionId: (s["sessionId"] || s["session_id"] || "") as string,
