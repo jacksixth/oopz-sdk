@@ -5,5 +5,4 @@ export { AreaService } from "./area";
 export { Channel } from "./channel";
 export { Person } from "./person";
 export { Moderation } from "./moderation";
-export { Voice } from "./voice";
-
+export { Voice, OopzVoiceUnsupportedError } from "./voice";

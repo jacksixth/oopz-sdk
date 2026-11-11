@@ -2,6 +2,7 @@ import WebSocket = require("ws");
 import { OopzConfig } from "../config";
 import { OopzConnectionError } from "../exceptions";
 import { sdkLog } from "../logger";
+import { buildProxyUrl, ProxyAgent } from "./proxy";
 import type { JsonObject } from "../models";
 
 /**
@@ -62,7 +63,21 @@ export class WebSocketTransport {
 
     sdkLog("[oopz-sdk:ws] 正在连接:", url);
 
-    this.ws = new WebSocket(url, { headers });
+    // 代理配置：WebSocket 走 CONNECT 隧道（对齐 Python build_websocket_proxy）
+    const proxyUrl = buildProxyUrl(url, this.config.proxy);
+    let agent: ProxyAgent | undefined;
+    if (proxyUrl) {
+      const parsed = new URL(url);
+      const secure = parsed.protocol === "wss:";
+      const port = parsed.port
+        ? Number(parsed.port)
+        : secure
+          ? 443
+          : 80;
+      agent = new ProxyAgent(proxyUrl, parsed.hostname, port, secure);
+    }
+
+    this.ws = new WebSocket(url, { headers, agent });
     this.closeInfo = null;
 
     // 持久 close 监听：确保 recv() 间隙的关闭也能捕获

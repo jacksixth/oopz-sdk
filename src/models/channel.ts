@@ -5,7 +5,6 @@ export enum ChannelType {
   CATEGORY = 2,
 }
 
-/** 频道设置 / 信息。 */
 export interface ChannelSetting {
   channelId: string;
   areaId: string;
@@ -17,20 +16,40 @@ export interface ChannelSetting {
   isPrivate?: boolean;
 }
 
-/** 创建频道的结果。 */
 export interface CreateChannelResult {
   channelId: string;
   name: string;
   type: ChannelType;
 }
 
-/** 编辑频道的参数。 */
 export interface ChannelEdit {
   name?: string;
   topic?: string;
   position?: number;
   groupId?: string;
   isPrivate?: boolean;
+}
+
+/**
+ * 进入语音频道后服务端返回的签名信息（对齐 Python ChannelSign）。
+ */
+export interface ChannelSign {
+  /** Agora 供应商签名（作为 rtcToken 使用）。 */
+  rtcToken: string;
+  /** Agora 房间名。 */
+  rtcChannelName: string;
+  /** 房间 ID。 */
+  roomId: string;
+  /** 供应商签名。 */
+  supplierSign: string;
+  /** Agora App ID。 */
+  appId: number;
+  /** 用户签名。 */
+  userSign: string;
+  /** 供应商标识。 */
+  supplier: string;
+  /** 签名有效期（秒）。 */
+  expireSeconds: number;
 }
 
 /**

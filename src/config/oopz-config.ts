@@ -5,6 +5,7 @@ import {
   RetryConfig,
   HeartbeatConfig,
   ProxyConfig,
+  RateLimitConfig,
 } from "./settings";
 import { OopzAuthError } from "../exceptions";
 
@@ -14,7 +15,7 @@ export const DEFAULT_WS_URL = "wss://ws.oopz.cn";
 export const DEFAULT_APP_VERSION = "69514";
 export const DEFAULT_PLATFORM = "windows";
 export const DEFAULT_CHANNEL = "Web";
-export const DEFAULT_AGORA_APP_ID = "b9a2b7b2b7b2b7b2b7b2b7b2b7b2b7b2";
+export const DEFAULT_AGORA_APP_ID = "358eebceadb94c2a9fd91ecd7b341602";
 
 export const DEFAULT_RETRY: Required<RetryConfig> = {
   maxAttempts: 3,
@@ -26,7 +27,15 @@ export const DEFAULT_HEARTBEAT: Required<HeartbeatConfig> = {
   maxReconnectInterval: 120,
 };
 
-export const DEFAULT_REQUEST_TIMEOUT: [number, number] = [10, 30];
+/**
+ * 默认请求超时（毫秒）：[连接超时, 读取超时]。
+ * 对齐 Python SDK 的 `DEFAULT_REQUEST_TIMEOUT`。
+ */
+export const DEFAULT_REQUEST_TIMEOUT: [number, number] = [10_000, 30_000];
+
+export const DEFAULT_RATE_LIMIT: Required<RateLimitConfig> = {
+  interval: 0,
+};
 
 /**
  * Oopz SDK 主配置对象。
@@ -64,10 +73,6 @@ export class OopzConfig {
   areaMembersPageCacheMaxEntries: number;
   areaMembersPageCacheTtl: number;
 
-  // 请求
-  requestTimeout: number | [number, number];
-  rateLimitInterval: number;
-
   // Agora
   agoraAppId: string;
 
@@ -79,9 +84,9 @@ export class OopzConfig {
   debug: boolean;
 
   // 子配置
-  request: RequestConfig;
+  request: Required<RequestConfig>;
   retry: Required<RetryConfig>;
-  rateLimit: OopzConfigOptions["rateLimit"];
+  rateLimit: Required<RateLimitConfig>;
   heartbeat: Required<HeartbeatConfig>;
   proxy: ProxyConfig;
 
@@ -112,9 +117,6 @@ export class OopzConfig {
     this.areaMembersPageCacheMaxEntries = options.areaMembersPageCacheMaxEntries ?? 200;
     this.areaMembersPageCacheTtl = options.areaMembersPageCacheTtl ?? 10;
 
-    this.requestTimeout = options.requestTimeout ?? DEFAULT_REQUEST_TIMEOUT;
-    this.rateLimitInterval = options.rateLimitInterval ?? 0;
-
     this.agoraAppId = options.agoraAppId ?? DEFAULT_AGORA_APP_ID;
 
     this.ignoreSelfMessages = options.ignoreSelfMessages ?? true;
@@ -123,11 +125,43 @@ export class OopzConfig {
     this.debug = options.debug ?? false;
     setSdkDebug(this.debug);
 
-    this.request = options.request ?? {};
+    // `request.timeout` / `rateLimit.interval` 是唯一事实来源；
+    // 顶层的 `requestTimeout` / `rateLimitInterval` 只是它的别名（见下方 getter/setter）。
+    this.request = {
+      timeout: options.request?.timeout ?? options.requestTimeout ?? DEFAULT_REQUEST_TIMEOUT,
+    };
     this.retry = { ...DEFAULT_RETRY, ...options.retry };
-    this.rateLimit = options.rateLimit;
+    this.rateLimit = {
+      interval: options.rateLimit?.interval ?? options.rateLimitInterval ?? DEFAULT_RATE_LIMIT.interval,
+    };
     this.heartbeat = { ...DEFAULT_HEARTBEAT, ...options.heartbeat };
     this.proxy = options.proxy ?? {};
+  }
+
+  /**
+   * 请求超时（毫秒）。
+   *
+   * 单一值表示总超时；`[连接超时, 读取超时]` 表示分段超时。
+   * 与 `config.request.timeout` 是同一个值（对齐 Python 的 `request_timeout` property）。
+   */
+  get requestTimeout(): number | [number, number] {
+    return this.request.timeout;
+  }
+
+  set requestTimeout(value: number | [number, number]) {
+    this.request.timeout = value;
+  }
+
+  /**
+   * 请求间隔限流（秒）。
+   * 与 `config.rateLimit.interval` 是同一个值（对齐 Python 的 `rate_limit_interval` property）。
+   */
+  get rateLimitInterval(): number {
+    return this.rateLimit.interval;
+  }
+
+  set rateLimitInterval(value: number) {
+    this.rateLimit.interval = value;
   }
 
   /** 检查是否所有必需的凭据都已提供。 */
@@ -154,6 +188,7 @@ export class OopzConfig {
       privateKey: env[`${prefix}PRIVATE_KEY`] ?? undefined,
       baseUrl: env[`${prefix}BASE_URL`] ?? undefined,
       wsUrl: env[`${prefix}WS_URL`] ?? undefined,
+      appVersion: env[`${prefix}APP_VERSION`] ?? undefined,
       ...overrides,
     };
     return new OopzConfig(options);

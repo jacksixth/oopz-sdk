@@ -1,6 +1,7 @@
 import * as http from "node:http";
 import * as https from "node:https";
 import * as zlib from "node:zlib";
+import type * as stream from "node:stream";
 import { OopzConfig } from "../config";
 import { Signer, buildOopzApiHeaders } from "../auth";
 import { DEFAULT_HEADERS } from "../config/constants";
@@ -8,8 +9,12 @@ import {
   OopzTransportError,
   OopzRateLimitError,
   OopzApiError,
+  OopzAuthError,
+  AUTH_FAILURE_STATUS_CODES,
 } from "../exceptions";
+import { coerceBool } from "../utils/payload";
 import type { JsonObject } from "../models";
+import { buildProxyUrl, connectThroughProxy } from "./proxy";
 
 /** HTTP 传输层的扩展 fetch 选项。 */
 export interface HttpRequestOptions {
@@ -27,18 +32,6 @@ export interface HttpResponse<T = unknown> {
   statusText: string;
   headers: Record<string, string>;
   data: T;
-}
-
-/** 严格布尔转换（对齐 Python coerce_bool）。 */
-function coerceBool(value: unknown, defaultValue: boolean = false): boolean {
-  if (value === null || value === undefined) return defaultValue;
-  if (typeof value === "boolean") return value;
-  if (typeof value === "number") return value !== 0;
-  if (typeof value === "string") {
-    const lowered = value.toLowerCase().trim();
-    return lowered !== "false" && lowered !== "0" && lowered !== "";
-  }
-  return true;
 }
 
 /**
@@ -88,7 +81,7 @@ export class HttpTransport {
 
   /**
    * 频率限制节流（对齐 Python throttle）。
-   * 确保请求间至少间隔 rate_limit_interval 秒。
+   * 确保请求间至少间隔 rate_limit.interval 秒。
    */
   async throttle(): Promise<void> {
     const interval = (this.config.rateLimit?.interval ?? 0) * 1000;
@@ -96,8 +89,10 @@ export class HttpTransport {
 
     // 串行化节流操作（对齐 Python _rate_lock）
     const prev = this.rateLock;
-    let release: () => void;
-    this.rateLock = new Promise<void>((resolve) => { release = resolve; });
+    let release: () => void = () => undefined;
+    this.rateLock = new Promise<void>((resolve) => {
+      release = resolve;
+    });
 
     await prev;
 
@@ -108,11 +103,14 @@ export class HttpTransport {
     }
     this.lastRequestTime = Date.now();
 
-    release!();
+    release();
   }
 
   /**
    * 执行 HTTP 请求，包含重试和频率限制处理。
+   *
+   * 注意：签名只对 GET 等幂等请求重试时复用同一组 header 会导致签名失效，
+   * 因此每次重试都会重新签名。
    */
   async request(
     method: string,
@@ -128,7 +126,7 @@ export class HttpTransport {
     const url = `${this.config.baseUrl}${path}`;
     const maxAttempts = this.config.retry.maxAttempts;
     const timeoutVal = options.timeoutMs ?? this.config.request?.timeout;
-    const timeoutMs = typeof timeoutVal === "number" ? timeoutVal : Array.isArray(timeoutVal) ? timeoutVal[0] * 1000 : 30_000;
+    const timeoutMs = this.resolveTimeout(timeoutVal);
 
     let lastError: Error | null = null;
 
@@ -138,32 +136,60 @@ export class HttpTransport {
         const bodyStr = options.body ?? "";
         let headers: Record<string, string> = {
           ...DEFAULT_HEADERS,
-          ...buildOopzApiHeaders(this.config, this.signer, path, bodyStr),
         };
+
+        if (!options.skipSign) {
+          headers = { ...headers, ...buildOopzApiHeaders(this.config, this.signer, path, bodyStr) };
+        }
 
         if (options.headers) {
           headers = { ...headers, ...options.headers };
         }
 
-        const parsedUrl = new globalThis.URL(url);
+        const parsedUrl = new URL(url);
         const isHttps = parsedUrl.protocol === "https:";
-        const agent = isHttps ? this.httpsAgent : this.httpAgent;
+        const targetPort = parsedUrl.port
+          ? Number(parsedUrl.port)
+          : isHttps
+            ? 443
+            : 80;
 
-        // 构建代理配置（对齐 Python build_aiohttp_proxy）
-        const proxyUrl = this.resolveProxy(parsedUrl);
+        // 代理配置（对齐 Python build_aiohttp_proxy）
+        // 代理下统一走 CONNECT 隧道：http 目标用明文隧道，https 目标再叠一层 TLS。
+        const proxyUrl = buildProxyUrl(url, this.config.proxy);
+
+        // 代理：先建立隧道，再把 socket 交给请求
+        let proxySocket: stream.Duplex | undefined;
+        if (proxyUrl) {
+          proxySocket = await connectThroughProxy(
+            proxyUrl,
+            parsedUrl.hostname,
+            targetPort,
+            isHttps
+          );
+        }
 
         const response = await new Promise<HttpResponse<string>>((resolve, reject) => {
           const reqOptions: http.RequestOptions = {
             method,
             headers,
             timeout: timeoutMs,
-            agent,
             hostname: parsedUrl.hostname,
-            port: parsedUrl.port || (isHttps ? 443 : 80),
+            port: targetPort,
             path: parsedUrl.pathname + parsedUrl.search,
           };
 
           const mod = isHttps ? https : http;
+
+          // 代理配置（对齐 Python build_aiohttp_proxy）：
+          // 通过 CONNECT 隧道访问目标；隧道建立完成后由 createConnection 交付 socket。
+          // 注意：只有在不设置 agent 时 Node 才会使用 options.createConnection，
+          // 因此代理分支下不能设置 agent。
+          if (proxyUrl) {
+            reqOptions.createConnection = () => proxySocket!;
+          } else {
+            reqOptions.agent = isHttps ? this.httpsAgent : this.httpAgent;
+          }
 
           const req = mod.request(reqOptions, (res) => {
             const chunks: Buffer[] = [];
@@ -216,20 +242,35 @@ export class HttpTransport {
           req.end();
         });
 
-        // 检查频率限制
+        // 429 交给上层决定是否重试：这里不吞掉错误类型
         if (response.status === 429) {
-          const retryAfter = parseInt(response.headers["retry-after"] || "1", 10);
-          const retryMs = retryAfter * 1000;
-          throw new OopzRateLimitError("Rate limited", retryMs);
+          throw new OopzRateLimitError(
+            this.extractErrorMessage(response, "HTTP 429"),
+            this.parseRetryAfterMs(response),
+            response
+          );
+        }
+
+        // 鉴权失效（401/428）单独上报，便于调用方续期凭据
+        if (AUTH_FAILURE_STATUS_CODES.has(response.status)) {
+          throw new OopzAuthError(
+            `Oopz authentication failed (HTTP ${response.status}): ` +
+              this.extractErrorMessage(response, `HTTP ${response.status}`),
+            response.status,
+            response
+          );
         }
 
         return response;
       } catch (err) {
         lastError = err as Error;
 
-        if (err instanceof OopzRateLimitError) {
-          await sleep(Math.min(err.retryAfter, 30_000));
-          continue;
+        // 429 / 鉴权失败不在传输层重试：交给调用方按业务语义处理
+        if (
+          err instanceof OopzRateLimitError ||
+          err instanceof OopzAuthError
+        ) {
+          throw err;
         }
 
         if (attempt < maxAttempts) {
@@ -272,10 +313,10 @@ export class HttpTransport {
         // 使用默认值
       }
       throw new OopzApiError(
-        typeof msg === "string" ? msg : `HTTP ${response.status}`,
+        typeof msg === "string" && msg ? msg : `HTTP ${response.status}`,
         code,
-        payload,
-        response
+        response,
+        payload
       );
     }
 
@@ -286,19 +327,19 @@ export class HttpTransport {
       throw new OopzApiError(
         `response is not valid JSON: ${(e as Error).message}`,
         response.status,
-        undefined,
         response
       );
     }
 
     // 对齐 Python: 检查响应 JSON 中的 status 字段
+    // status 可能是 bool、整数或字符串（包括 "false"/"0"），必须用严格布尔转换
     if (data && typeof data === "object" && "status" in data) {
       if (!coerceBool((data as any).status, false)) {
         throw new OopzApiError(
           (data as any).message ?? (data as any).msg ?? "Oopz API request failed",
           response.status,
-          data,
-          response
+          response,
+          data
         );
       }
     }
@@ -321,12 +362,15 @@ export class HttpTransport {
     throw new OopzApiError(
       "response JSON does not contain 'data' field",
       200,
+      undefined,
       jsonData
     );
   }
 
   /**
    * 带重试的 request_data（对齐 Python request_data_with_retry）。
+   *
+   * 只对 429 限流做重试；其它错误直接抛出。
    */
   async requestDataWithRetry<T = JsonObject>(
     method: string,
@@ -344,27 +388,63 @@ export class HttpTransport {
         return await this.requestData<T>(method, path, options);
       } catch (err) {
         if (err instanceof OopzRateLimitError && retryOn429 && attempt < maxAttempts) {
-          const waitMs = err.retryAfter > 0 ? err.retryAfter : Math.min(attempt, 3) * 1000;
+          const waitMs =
+            err.retryAfter > 0 ? err.retryAfter : Math.min(attempt, 3) * 1000;
           await sleep(waitMs);
           continue;
         }
-        if (attempt >= maxAttempts) throw err;
+        throw err;
       }
     }
 
-    throw new OopzTransportError(`requestDataWithRetry failed after ${maxAttempts} attempts`);
+    // 理论不可达：循环内要么 return 要么 throw
+    throw new OopzTransportError(
+      `requestDataWithRetry failed after ${maxAttempts} attempts`
+    );
   }
 
-  /** 根据 URL scheme 解析代理地址（对齐 Python build_aiohttp_proxy）。 */
-  private resolveProxy(parsedUrl: URL): string | undefined {
-    const scheme = parsedUrl.protocol.replace(":", "").toLowerCase();
-    if (scheme === "https" && this.config.proxy.https) {
-      return this.config.proxy.https;
+  /** 解析 Retry-After 响应头，返回毫秒数。 */  private parseRetryAfterMs(response: HttpResponse<string>): number {
+    const raw = response.headers["retry-after"];
+    if (!raw) return 0;
+    const seconds = parseInt(raw, 10);
+    if (!Number.isFinite(seconds) || seconds < 0) return 0;
+    return Math.min(seconds * 1000, 30_000);
+  }
+
+  /** 从响应体中提取错误信息。 */
+  private extractErrorMessage(
+    response: HttpResponse<string>,
+    defaultMessage: string
+  ): string {
+    try {
+      const payload = JSON.parse(response.data);
+      if (payload && typeof payload === "object") {
+        const message = (payload as any).message ?? (payload as any).msg;
+        const error = (payload as any).error;
+        if (typeof message === "string" && message) return message;
+        if (typeof error === "string" && error) return error;
+      }
+    } catch {
+      // 非 JSON 响应，使用默认值
     }
-    if (scheme === "http" && this.config.proxy.http) {
-      return this.config.proxy.http;
+    return defaultMessage;
+  }
+
+  /**
+   * 解析超时配置。
+   *
+   * 支持三种形态（对齐 Python `_build_timeout`）：
+   * - number：单值超时（毫秒）
+   * - [connect, read]：连接超时 / 读取超时（毫秒）
+   */
+  private resolveTimeout(
+    timeoutVal: number | [number, number] | undefined
+  ): number {
+    if (typeof timeoutVal === "number") return timeoutVal;
+    if (Array.isArray(timeoutVal) && timeoutVal.length >= 2) {
+      return timeoutVal[1];
     }
-    return undefined;
+    return 30_000;
   }
 
   /** 便捷方法：GET 请求并解析 JSON。 */

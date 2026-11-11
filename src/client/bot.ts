@@ -2,15 +2,16 @@ import { OopzConfig } from "../config";
 import { OopzRESTClient } from "./rest";
 import { OopzWSClient } from "./ws";
 import { sdkLog } from "../logger";
-import type { EventHandler, EventParser } from "../events";
-import type { AnyEvent } from "../models/event";
+import { Voice } from "../services/voice";
+import type { EventHandler } from "../events";
+import type { AnyEvent, EventMap } from "../models/event";
 import type { Message as MessageService } from "../services/message";
 import type { Media } from "../services/media";
 import type { AreaService } from "../services/area";
 import type { Channel } from "../services/channel";
 import type { Person } from "../services/person";
 import type { Moderation } from "../services/moderation";
-import type { JsonObject } from "../models/base";
+import type { JsonObject } from "../models";
 
 /**
  * 高级 bot 入口点 — 将 REST 客户端、WebSocket 客户端、
@@ -27,12 +28,6 @@ import type { JsonObject } from "../models/base";
  *
  * bot.on("message", async (event) => {
  *   console.log(`[${event.message.senderNickname}]: ${event.message.content}`);
- *   await bot.messages.reply(
- *     event.message.areaId!,
- *     event.message.channelId!,
- *     event.message.messageId,
- *     "Hello!"
- *   );
  * });
  *
  * await bot.start();
@@ -52,6 +47,8 @@ export class OopzBot {
   /** person 服务的别名。 */
   public members: Person;
   public moderation: Moderation;
+  /** 语音频道服务。 */
+  public voice: Voice;
 
   private _started = false;
 
@@ -72,6 +69,13 @@ export class OopzBot {
     this.person = this.rest.person;
     this.members = this.rest.members;
     this.moderation = this.rest.moderation;
+    this.voice = new Voice(
+      this,
+      config,
+      this.rest.transport,
+      this.rest.signer,
+      this.rest.cache
+    );
   }
 
   /**
@@ -100,6 +104,7 @@ export class OopzBot {
     if (!this._started) return;
 
     await this.ws.stop();
+    await this.voice.close();
     await this.rest.close();
 
     this._started = false;
@@ -127,26 +132,40 @@ export class OopzBot {
   /**
    * 注册事件处理器。
    *
-   * 支持的事件名称：
-   * - `"message"` — 收到频道消息
-   * - `"message.private"` — 收到私聊消息
-   * - `"message.edit"` — 消息被编辑
-   * - `"recall"` — 消息被撤回
-   * - `"recall.private"` — 私聊消息被撤回
-   * - `"channel.join"` / `"channel.leave"` — 频道加入/离开
-   * - `"member.join"` / `"member.leave"` — 成员加入/离开
-   * - `"voice.enter"` / `"voice.leave"` — 语音频道加入/离开
-   * - `"role.update"` — 身份组更新
-   * - `"friend.request"` / `"friend.accept"` — 好友事件
+   * 事件名会决定 handler 的参数类型，例如 `bot.on("message", ...)` 的
+   * `event` 是 `MessageEvent`，可直接访问 `event.message`。
+   *
+   * 支持的事件名：
+   * - `"message"` / `"message.private"` / `"message.edit"` / `"message.private.edit"` — 消息
+   * - `"recall"` / `"recall.private"` — 撤回
+   * - `"voice.enter"` / `"voice.leave"` — 语音频道进出
+   * - `"channel.update"` / `"channel.create"` / `"channel.delete"` — 频道变化
+   * - `"user.update"` / `"user.login_state"` — 用户变化
+   * - `"area.update"` — 域信息变化
+   * - `"role.change"` — 身份组变化
+   * - `"friend.request"` / `"friend.delete"` — 好友事件
+   * - `"message.reaction"` — 消息表情
+   * - `"moderation.text_ban"` / `"moderation.voice_ban"` — 管理事件
+   * - `"server_id"` / `"auth"` / `"heartbeat"` — 系统事件
    * - `"*"` — 通配符，匹配所有事件
    * - `"unknown"` — 未映射事件码的兜底
    */
-  on<T extends AnyEvent = AnyEvent>(eventName: string, handler: EventHandler<T>): void {
+  on<K extends keyof EventMap>(
+    eventName: K,
+    handler: EventHandler<EventMap[K]>
+  ): void;
+  on(eventName: string, handler: EventHandler<AnyEvent>): void;
+  on(eventName: string, handler: EventHandler<AnyEvent>): void {
     this.ws.on(eventName, handler);
   }
 
   /** 移除先前注册的事件处理器。 */
-  off<T extends AnyEvent = AnyEvent>(eventName: string, handler: EventHandler<T>): void {
+  off<K extends keyof EventMap>(
+    eventName: K,
+    handler: EventHandler<EventMap[K]>
+  ): void;
+  off(eventName: string, handler: EventHandler<AnyEvent>): void;
+  off(eventName: string, handler: EventHandler<AnyEvent>): void {
     this.ws.off(eventName, handler);
   }
 

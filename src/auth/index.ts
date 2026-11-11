@@ -7,5 +7,3 @@ export {
 } from "./credentials";
 export type { OopzLoginCredentialsData } from "./credentials";
 export { ClientMessageIdGenerator, requestId, timestampMs, timestampUs } from "./ids";
-
-

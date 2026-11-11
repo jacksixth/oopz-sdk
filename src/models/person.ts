@@ -17,6 +17,7 @@ export interface Profile {
   bio?: string;
   gender?: number;
   birthday?: string;
+  level?: number;
 }
 
 export interface UserLevelInfo {

@@ -1,11 +1,17 @@
 import { OopzConfig } from "../config";
 import { HeartbeatConfig } from "../config/settings";
-import { EVENT_AUTH, EVENT_HEARTBEAT, EVENT_SUBSCRIBE_AREA_EVENTS } from "../config/constants";
+import {
+  EVENT_AUTH,
+  EVENT_AUTH_RESULT,
+  EVENT_HEARTBEAT,
+  EVENT_SUBSCRIBE_AREA_EVENTS,
+} from "../config/constants";
 import { WebSocketTransport, WebSocketClosedError } from "../transport";
 import { EventDispatcher } from "../events";
 import { sdkLog } from "../logger";
+import { OopzAuthError } from "../exceptions";
 import type { EventHandler } from "../events";
-import type { AnyEvent } from "../models/event";
+import type { AnyEvent, EventMap } from "../models/event";
 import type { JsonObject } from "../models/base";
 
 /** WebSocket 关闭信息（对齐 Python CloseInfo）。 */
@@ -54,7 +60,6 @@ export class OopzWSClient {
   private onReconnect: WsOnReconnect | null;
 
   private running = false;
-  private stopResolve: (() => void) | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private consecutiveFailures = 0;
   private hasConnectedOnce = false;
@@ -117,6 +122,18 @@ export class OopzWSClient {
             }
           }
           runtimeError = err;
+        } else if (err instanceof OopzAuthError) {
+          // 鉴权失败是致命错误：重连没有意义，只会一直失败。
+          // 直接向上抛出，让调用方决定如何处理（更新凭据 / 停止）。
+          fatalError = err;
+          runtimeError = err;
+          if (this.onError) {
+            try {
+              await this.safeCallback("onError", this.onError, err);
+            } catch (callbackErr: any) {
+              fatalError = callbackErr;
+            }
+          }
         } else if (err instanceof Error) {
           runtimeError = err;
           console.error("[oopz-sdk:ws] WebSocket 运行异常:", err.message);
@@ -287,39 +304,60 @@ export class OopzWSClient {
         }
       }
 
-      // 通过调度器分发事件
       try {
         const parsed: JsonObject = JSON.parse(raw);
         const event = parsed["event"] as number | undefined;
-        const bodyRaw = parsed["body"] as string | undefined;
+
+        // 鉴权结果（event=21）：checkRes=false 表示凭据被服务端拒绝，
+        // 必须当作致命错误抛出，否则会陷入「不断重连但永远认证失败」的死循环。
+        if (event === EVENT_AUTH_RESULT) {
+          const checkRes = this.parseCheckRes(parsed["body"]);
+          if (checkRes === false) {
+            throw new OopzAuthError(
+              "WebSocket 鉴权校验未通过 (event=21, checkRes=false)，请检查 deviceId / personUid / jwtToken"
+            );
+          }
+          sdkLog("[oopz-sdk:ws] ✅ 认证通过!");
+          continue;
+        }
 
         // auth (253) 和 heartbeat (254) 由 SDK 内部处理，不进入 dispatcher
         if (event === EVENT_AUTH || event === EVENT_HEARTBEAT) {
           continue;
         }
 
-        // 认证检查响应
-        if (bodyRaw) {
-          try {
-            const inner = JSON.parse(bodyRaw);
-            if (typeof inner["checkRes"] === "boolean") {
-              if (inner["checkRes"]) {
-                sdkLog("[oopz-sdk:ws] ✅ 认证通过!");
-              } else {
-                console.error("[oopz-sdk:ws] ❌ 认证失败! 请检查 deviceId、personUid、jwtToken 是否正确。");
-              }
-              continue;
-            }
-          } catch { /* fall through to dispatcher */ }
+        // 顺序分发：保证事件按接收顺序依次处理完毕
+        await this.dispatcher.dispatch(parsed);
+      } catch (err) {
+        if (err instanceof OopzAuthError) {
+          throw err;
         }
-
-        this.dispatcher.dispatch(parsed).catch((err) => {
-          console.error("[oopz-sdk] Dispatch error:", err);
-        });
-      } catch {
-        // 非 JSON 消息忽略
+        // 非 JSON 消息或分发错误忽略
+        console.error("[oopz-sdk:ws] 消息处理异常:", err);
       }
     }
+  }
+
+  /** 从 body 中解析 checkRes 字段。 */
+  private parseCheckRes(bodyRaw: unknown): boolean | undefined {
+    if (typeof bodyRaw === "string") {
+      try {
+        const inner = JSON.parse(bodyRaw);
+        if (inner && typeof inner["checkRes"] === "boolean") {
+          return inner["checkRes"];
+        }
+      } catch {
+        // 忽略
+      }
+      return undefined;
+    }
+    if (bodyRaw && typeof bodyRaw === "object") {
+      const inner = bodyRaw as JsonObject;
+      if (typeof inner["checkRes"] === "boolean") {
+        return inner["checkRes"];
+      }
+    }
+    return undefined;
   }
 
   /** 安全调用回调（捕获异常并包装）。 */
@@ -346,13 +384,30 @@ export class OopzWSClient {
     return "connection closed";
   }
 
-  /** 注册事件处理器。 */
-  on<T extends AnyEvent = AnyEvent>(eventName: string, handler: EventHandler<T>): void {
+  /**
+   * 注册事件处理器。
+   *
+   * 事件名决定 handler 参数的类型，例如 `on("message", ...)` 的 event
+   * 是 `MessageEvent`，可直接访问 `event.message`。
+   */
+  on<K extends keyof EventMap>(
+    eventName: K,
+    handler: EventHandler<EventMap[K]>
+  ): void;
+  on(eventName: string, handler: EventHandler<AnyEvent>): void;
+  on(eventName: string, handler: EventHandler<AnyEvent>): void {
     this.dispatcher.on(eventName, handler);
   }
 
-  /** 移除事件处理器。 */
-  off<T extends AnyEvent = AnyEvent>(eventName: string, handler: EventHandler<T>): void {
+  /**
+   * 移除先前注册的事件处理器。
+   */
+  off<K extends keyof EventMap>(
+    eventName: K,
+    handler: EventHandler<EventMap[K]>
+  ): void;
+  off(eventName: string, handler: EventHandler<AnyEvent>): void;
+  off(eventName: string, handler: EventHandler<AnyEvent>): void {
     this.dispatcher.off(eventName, handler);
   }
 

@@ -74,3 +74,14 @@ export interface RoleInfo {
   position?: number;
   permissions?: number;
 }
+
+/** 域内角色信息（对齐 Python AreaRoleInfo）。 */
+export interface AreaRoleInfo {
+  roleId: number;
+  name?: string;
+  isOwner?: boolean;
+  maxRole?: number;
+  categoryKeys?: string[];
+  privilegeKeys?: string[];
+  isDisplay?: boolean;
+}

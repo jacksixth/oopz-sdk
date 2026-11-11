@@ -155,10 +155,10 @@ bot.on("message", async (event) => {
           break;
         }
         const result = await bot.channels.deleteChannel(msg.areaId, channelId);
-        if (result.success) {
+        if (result.ok) {
           await bot.reply(msg.areaId, msg.channelId, msg.messageId, `✅ 频道已删除: ${channelId}`);
         } else {
-          await bot.reply(msg.areaId, msg.channelId, msg.messageId, `❌ 删除失败: ${result.error}`);
+          await bot.reply(msg.areaId, msg.channelId, msg.messageId, `❌ 删除失败: ${result.message}`);
         }
         break;
       }

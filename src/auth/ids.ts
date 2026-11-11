@@ -1,8 +1,10 @@
 /**
- * ID 生成器（对齐 Python SDK `oopz_sdk.auth.ids`）。
+ * ID 与时间戳生成（对齐 Python SDK `oopz_sdk.auth.ids`）。
+ *
+ * 时间戳一律使用 Unix epoch，与 Python 的 `time.time()` 语义一致。
  */
 
-import * as crypto from "crypto";
+import * as crypto from "node:crypto";
 
 /** 客户端消息 ID 生成器。 */
 export class ClientMessageIdGenerator {
@@ -19,12 +21,12 @@ export function requestId(): string {
   return crypto.randomUUID();
 }
 
-/** 生成毫秒级时间戳字符串。 */
+/** 生成毫秒级时间戳字符串（Unix epoch）。 */
 export function timestampMs(): string {
   return String(Math.floor(Date.now()));
 }
 
-/** 生成微秒级时间戳字符串。 */
+/** 生成微秒级时间戳字符串（Unix epoch）。 */
 export function timestampUs(): string {
   return String(Math.floor(Date.now() * 1000));
 }

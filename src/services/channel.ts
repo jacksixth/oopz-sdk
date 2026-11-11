@@ -5,6 +5,7 @@ import type {
   ChannelEdit,
   VoiceChannelMembersResult,
   VoiceChannelMemberInfo,
+  ChannelSign,
 } from "../models";
 import { ChannelType } from "../models";
 import type { OperationResult } from "../models/base";
@@ -15,14 +16,13 @@ import type { JsonObject } from "../models/base";
 const VOICE_TYPES = new Set(["VOICE", "AUDIO"]);
 
 /**
- * 频道服务 — 创建、编辑、删除频道。
+ * 频道服务 — 创建、编辑、删除频道、语音频道进出。
  */
 export class Channel extends BaseService {
   /**
-   * 获取频道信息。
+   * 获取频道信息（对齐 Python get_channel_setting_info）。
    */
   async getChannel(areaId: string, channelId: string): Promise<ChannelSetting | null> {
-    this.requireParam(areaId, "areaId");
     this.requireParam(channelId, "channelId");
 
     try {
@@ -39,7 +39,7 @@ export class Channel extends BaseService {
         groupId: data["groupId"] as string | undefined,
         position: data["position"] as number | undefined,
         topic: data["topic"] as string | undefined,
-        isPrivate: data["isPrivate"] as boolean | undefined,
+        isPrivate: data["secret"] as boolean | undefined,
       };
     } catch {
       return null;
@@ -125,7 +125,82 @@ export class Channel extends BaseService {
   }
 
   /**
-   * 创建新频道。
+   * 进入频道（对齐 Python enter_channel）。
+   *
+   * 语音频道（channelType = "VOICE"）会返回 ChannelSign，供语音客户端使用。
+   */
+  async enterChannel(
+    areaId: string,
+    channelId: string,
+    channelType: string = "TEXT",
+    options?: { fromArea?: string; fromChannel?: string; pid?: string },
+  ): Promise<ChannelSign> {
+    this.requireParam(areaId, "areaId");
+    this.requireParam(channelId, "channelId");
+
+    const body: JsonObject = {
+      type: channelType,
+      area: areaId,
+      channel: channelId,
+    };
+
+    if (channelType === "VOICE") {
+      body["fromChannel"] = options?.fromChannel ?? "";
+      body["fromArea"] = options?.fromArea ?? "";
+      body["password"] = "";
+      body["sign"] = 1;
+      body["pid"] = options?.pid ?? this.config.personUid;
+    }
+
+    const result = await this.transport.post<JsonObject>("/area/v2/channel/enter", body);
+    const data = (result["data"] || result) as JsonObject;
+
+    return {
+      rtcToken: (data["supplierSign"] || data["userSign"] || "") as string,
+      rtcChannelName: (data["roomId"] || "") as string,
+      roomId: (data["roomId"] || "") as string,
+      supplierSign: (data["supplierSign"] || "") as string,
+      // 服务端未返回 appId 时回落到配置里的 Agora App ID
+      appId: (data["appId"] || this.config.agoraAppId || 0) as number,
+      userSign: (data["userSign"] || "") as string,
+      supplier: (data["supplier"] || "") as string,
+      expireSeconds: (data["expireSeconds"] || 86400) as number,
+    };
+  }
+
+  /**
+   * 退出语音频道（对齐 Python leave_voice_channel）。
+   */
+  async leaveVoiceChannel(
+    areaId: string,
+    channelId: string,
+    target?: string,
+  ): Promise<OperationResult> {
+    this.requireParam(areaId, "areaId");
+    this.requireParam(channelId, "channelId");
+
+    const resolvedTarget = target || this.config.personUid;
+    this.requireParam(resolvedTarget, "target");
+
+    try {
+      const params = new URLSearchParams({
+        area: areaId,
+        channel: channelId,
+        target: resolvedTarget,
+      });
+      await this.transport.del(
+        `/client/v1/area/v1/member/v1/removeFromChannel?${params}`
+      );
+      return success();
+    } catch (err) {
+      return failure(errorMessage(err));
+    }
+  }
+
+  /**
+   * 创建新频道（对齐 Python create_channel）。
+   *
+   * 未指定 groupId 时会自动取区域内第一个频道分组。
    */
   async createChannel(
     areaId: string,
@@ -136,11 +211,21 @@ export class Channel extends BaseService {
     this.requireParam(areaId, "areaId");
     this.requireParam(name, "name");
 
+    let groupId = options?.groupId ?? "";
+    if (!groupId) {
+      const groups = await this.owner.areas.getAreaChannels(areaId);
+      if (groups.length >= 1) {
+        groupId = groups[0].groupId;
+      } else {
+        throw new Error("no channel group found in area, groupId is required");
+      }
+    }
+
     const body: JsonObject = {
       area: areaId,
+      group: groupId,
       name,
       type,
-      group: options?.groupId ?? "",
       secret: false,
       maxMember: 100,
     };
@@ -171,7 +256,7 @@ export class Channel extends BaseService {
       await this.transport.post("/area/v3/channel/setting/edit", body);
       return success();
     } catch (err) {
-      return failure(String(err));
+      return failure(errorMessage(err));
     }
   }
 
@@ -187,7 +272,12 @@ export class Channel extends BaseService {
       await this.transport.requestJson("DELETE", `/client/v1/area/v1/channel/v1/delete?${params}`);
       return success();
     } catch (err) {
-      return failure(String(err));
+      return failure(errorMessage(err));
     }
   }
+}
+
+/** 提取错误信息文本（优先 err.message）。 */
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }

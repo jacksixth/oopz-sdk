@@ -34,6 +34,8 @@ export const EVENT_CHANNEL_DELETE = 13;
 export const EVENT_CHANNEL_UPDATE = 18;
 export const EVENT_USER_LEAVE_VOICE_CHANNEL = 19;
 export const EVENT_USER_ENTER_VOICE_CHANNEL = 20;
+/** 鉴权校验结果（与 EVENT_AUTH 配套，body.checkRes=false 表示凭据被拒）。 */
+export const EVENT_AUTH_RESULT = 21;
 export const EVENT_PUBLIC_CHANNEL_CREATE = 25;
 export const EVENT_USER_UPDATE = 26;
 export const EVENT_USER_LOGIN_STATE_CHANGED = 27;
@@ -46,22 +48,18 @@ export const EVENT_SUBSCRIBE_AREA_EVENTS = 249;
 export const EVENT_AUTH = 253;
 export const EVENT_HEARTBEAT = 254;
 
-/** 标签样式常量。 */
-export const STYLE_TAG_IMPORTANT = "important";
-export const STYLE_TAGS = [
-  "important",
-  "warning",
-  "info",
-  "success",
-  "error",
-] as const;
+/** 样式标签常量（对齐 Python SDK，协议要求大写）。 */
+export const STYLE_TAG_IMPORTANT = "IMPORTANT";
+export const STYLE_TAGS = [STYLE_TAG_IMPORTANT] as const;
 
-/** 附件类型常量。 */
-export const ATTACHMENT_TYPE_IMAGE = "image";
-export const ATTACHMENT_TYPE_AUDIO = "audio";
-export const ATTACHMENT_TYPE_FILE = "file";
+/** 附件类型常量（对齐 Python SDK，协议为大写枚举值）。 */
+export const ATTACHMENT_TYPE_IMAGE = "IMAGE";
+export const ATTACHMENT_TYPE_AUDIO = "AUDIO";
+export const ATTACHMENT_TYPE_FILE = "FILE";
 
-/** Oopz API 事件码 → SDK 事件名映射（对齐 Python SDK）。 */
+/**
+ * Oopz API 事件码 → SDK 事件名映射（对齐 Python SDK `EventParser.EVENT_SPECS`）。
+ */
 export const EVENT_CODE_MAP: Record<number, string> = {
   [EVENT_SERVER_ID]: "server_id",
   [EVENT_FRIEND_REQUEST]: "friend.request",

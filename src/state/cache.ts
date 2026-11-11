@@ -11,6 +11,7 @@ export class TTLCache<V> {
   private maxEntries: number;
   private ttl: number; // 秒
   private store: Map<string, CacheEntry<V>>;
+  /** 访问顺序（最近使用的在末尾）。 */
   private accessOrder: string[];
 
   constructor(maxEntries: number = 5000, ttl: number = 1800) {
@@ -27,6 +28,7 @@ export class TTLCache<V> {
     if (!entry) return undefined;
     if (Date.now() / 1000 > entry.expiresAt) {
       this.store.delete(keyStr);
+      this._removeFromOrder(keyStr);
       return undefined;
     }
     // 更新访问顺序
@@ -49,17 +51,26 @@ export class TTLCache<V> {
   delete(key: unknown): void {
     const keyStr = this._keyToString(key);
     this.store.delete(keyStr);
-    this.accessOrder = this.accessOrder.filter((k) => k !== keyStr);
+    this._removeFromOrder(keyStr);
   }
 
-  /** 按条件删除。 */
+  /**
+   * 按条件删除。
+   *
+   * 只移除命中的条目，并保留其余条目的 LRU 顺序
+   * （早期实现会清空整个 accessOrder，导致后续淘汰顺序失真）。
+   */
   deleteWhere(predicate: (key: unknown) => boolean): void {
-    for (const [keyStr] of this.store) {
+    const removed: string[] = [];
+    for (const [keyStr, entry] of this.store) {
       if (predicate(this._stringToKey(keyStr))) {
-        this.store.delete(keyStr);
+        removed.push(keyStr);
       }
     }
-    this.accessOrder = [];
+    for (const keyStr of removed) {
+      this.store.delete(keyStr);
+      this._removeFromOrder(keyStr);
+    }
   }
 
   /** 清空所有缓存。 */
@@ -68,9 +79,22 @@ export class TTLCache<V> {
     this.accessOrder = [];
   }
 
+  /** 当前条目数。 */
+  get size(): number {
+    return this.store.size;
+  }
+
   private _touch(keyStr: string): void {
-    this.accessOrder = this.accessOrder.filter((k) => k !== keyStr);
+    this._removeFromOrder(keyStr);
     this.accessOrder.push(keyStr);
+  }
+
+  /** 从访问顺序中移除某个 key（保持其余顺序不变）。 */
+  private _removeFromOrder(keyStr: string): void {
+    const idx = this.accessOrder.indexOf(keyStr);
+    if (idx >= 0) {
+      this.accessOrder.splice(idx, 1);
+    }
   }
 
   private _evictIfNeeded(): void {

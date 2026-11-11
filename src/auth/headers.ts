@@ -3,6 +3,9 @@ import { DEFAULT_HEADERS } from "../config/constants";
 
 /**
  * 根据配置构建 Oopz 专用的 HTTP 请求头。
+ *
+ * 与 {@link buildOopzApiHeaders} 的区别：这里不包含签名相关的 `Oopz-*` 头，
+ * 只包含浏览器模拟头与身份标识头，适用于不需要签名的请求。
  */
 export function buildOopzHeaders(
   config: OopzConfig,

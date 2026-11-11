@@ -14,7 +14,18 @@ export class CacheStore {
   private areaUserNicknames: TTLCache<string>;
   private areaMembersPages: TTLCache<AreaMembersPage>;
 
-  constructor(config: { userinfoCacheMaxEntries?: number; userinfoCacheTtl?: number; areaChannelsCacheMaxEntries?: number; areaChannelsCacheTtl?: number; personProfilesCacheMaxEntries?: number; personProfileCacheTtl?: number; areaUserNicknameCacheMaxEntries?: number; areaUserNicknameCacheTtl?: number; areaMembersPageCacheMaxEntries?: number; areaMembersPageCacheTtl?: number }) {
+  constructor(config: {
+    userinfoCacheMaxEntries?: number;
+    userinfoCacheTtl?: number;
+    areaChannelsCacheMaxEntries?: number;
+    areaChannelsCacheTtl?: number;
+    personProfilesCacheMaxEntries?: number;
+    personProfileCacheTtl?: number;
+    areaUserNicknameCacheMaxEntries?: number;
+    areaUserNicknameCacheTtl?: number;
+    areaMembersPageCacheMaxEntries?: number;
+    areaMembersPageCacheTtl?: number;
+  }) {
     this.userinfo = new TTLCache<UserInfo>(
       config.userinfoCacheMaxEntries ?? 5000,
       config.userinfoCacheTtl ?? 1800,

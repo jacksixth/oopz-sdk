@@ -19,8 +19,6 @@ const {
 const config = OopzConfig.fromEnv();
 setupLogging("INFO");
 
-// ============ 创建 Bot ============
-
 const bot = new OopzBot(config);
 
 // ============ 所有事件监听 ============
@@ -62,60 +60,84 @@ bot.on("recall.private", (event) => {
   console.log(`[recall.private]   私信被撤回: ${event.messageId}`);
 });
 
+// ── 表情事件 ──
+
+bot.on("message.reaction", (event) => {
+  console.log(`[message.reaction] ${event.person} 对消息 ${event.messageId} 添加了表情 ${event.emoji}`);
+});
+
 // ── 频道事件 ──
 
-bot.on("channel.join", (event) => {
-  console.log(`[channel.join]     用户 ${event.uid} 加入频道 ${event.channelId}`);
-});
-
-bot.on("channel.leave", (event) => {
-  console.log(`[channel.leave]    用户 ${event.uid} 离开频道 ${event.channelId}`);
-});
-
 bot.on("channel.update", (event) => {
-  console.log(`[channel.update]   频道 ${event.channelId} 信息更新:`, event.changes);
+  console.log(`[channel.update]   频道信息更新: ${event.channelId}`);
+  console.log(`  name: ${event.name}, type: ${event.channelType}, maxMember: ${event.maxMember}`);
 });
 
-// ── 成员事件 ──
-
-bot.on("member.join", (event) => {
-  console.log(`[member.join]      用户 ${event.uid} 加入区域 ${event.areaId}`);
+bot.on("channel.create", (event) => {
+  console.log(`[channel.create]   频道创建: ${event.channelId} (${event.name})`);
 });
 
-bot.on("member.leave", (event) => {
-  console.log(`[member.leave]     用户 ${event.uid} 离开区域 ${event.areaId}`);
+bot.on("channel.delete", (event) => {
+  console.log(`[channel.delete]   频道删除: ${event.channelId}`);
 });
 
 // ── 语音事件 ──
 
 bot.on("voice.enter", (event) => {
-  console.log(`[voice.enter]       用户进入语音频道`);
+  console.log(`[voice.enter]      用户进入语音频道: ${event.channelId}`);
+  console.log(`  persons: ${event.persons.join(", ")}, activeNum: ${event.activeNum}`);
 });
 
 bot.on("voice.leave", (event) => {
-  console.log(`[voice.leave]      用户离开语音频道`);
+  console.log(`[voice.leave]      用户离开语音频道: ${event.channelId}`);
 });
 
-// ── 身份组事件 ──
+// ── 用户 / 域 / 身份组事件 ──
 
-bot.on("role.update", (event) => {
-  console.log(`[role.update]      身份组更新`);
+bot.on("user.update", (event) => {
+  console.log(`[user.update]      用户资料更新: ${event.person}`);
+});
+
+bot.on("user.login_state", (event) => {
+  console.log(`[user.login_state] 用户登录状态变更: ${event.person} (${event.type})`);
+});
+
+bot.on("area.update", (event) => {
+  console.log(`[area.update]      域信息更新: ${event.areaId} (${event.name})`);
+});
+
+bot.on("role.change", (event) => {
+  console.log(`[role.change]      身份组变更: ${event.roleId} (${event.name})`);
 });
 
 // ── 好友事件 ──
 
 bot.on("friend.request", (event) => {
-  console.log(`[friend.request]   收到好友请求`);
+  console.log(`[friend.request]   收到好友请求: ${event.person} (${event.name || "?"})`);
 });
 
-bot.on("friend.accept", (event) => {
-  console.log(`[friend.accept]    好友请求被接受`);
+bot.on("friend.delete", (event) => {
+  console.log(`[friend.delete]    好友被删除: ${event.person}`);
 });
 
-// ── 服务端 ID 事件 ──
+// ── 管理事件 ──
+
+bot.on("moderation.text_ban", (event) => {
+  console.log(`[moderation.text_ban] 域内禁言: ${event.areaId}`);
+});
+
+bot.on("moderation.voice_ban", (event) => {
+  console.log(`[moderation.voice_ban] 域内禁麦: ${event.areaId}`);
+});
+
+// ── 系统事件 ──
 
 bot.on("server_id", (event) => {
   console.log(`[server_id]        服务端已确认 ID: ${event.serverId}`);
+});
+
+bot.on("auth", (event) => {
+  console.log(`[auth]             鉴权结果: code=${event.code}`);
 });
 
 // ── 未知事件兜底 ──
@@ -137,14 +159,17 @@ bot.on("*", (event) => {
 async function main() {
   console.log("🎧 事件监听器启动中...\n");
   console.log("已注册事件:");
-  console.log("  消息类: message, message.private, message.edit");
+  console.log("  消息类: message, message.private, message.edit, message.private.edit");
   console.log("  撤回类: recall, recall.private");
-  console.log("  频道类: channel.join, channel.leave, channel.update");
-  console.log("  成员类: member.join, member.leave");
+  console.log("  表情类: message.reaction");
+  console.log("  频道类: channel.update, channel.create, channel.delete");
   console.log("  语音类: voice.enter, voice.leave");
-  console.log("  身份组: role.update");
-  console.log("  好友类: friend.request, friend.accept");
-  console.log("  系统类: server_id, unknown, *");
+  console.log("  用户类: user.update, user.login_state");
+  console.log("  域类:   area.update");
+  console.log("  身份组: role.change");
+  console.log("  好友类: friend.request, friend.delete");
+  console.log("  管理类: moderation.text_ban, moderation.voice_ban");
+  console.log("  系统类: server_id, auth, unknown, *");
   console.log("");
 
   try {

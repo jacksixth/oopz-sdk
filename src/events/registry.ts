@@ -1,14 +1,26 @@
-import type { AnyEvent } from "../models/event";
+import type { AnyEvent, EventMap } from "../models/event";
 
 /** 已注册的事件处理器。 */
-export type EventHandler<T extends AnyEvent = AnyEvent> = (event: T) => void | Promise<void>;
+export type EventHandler<T extends AnyEvent = AnyEvent> = (
+  event: T,
+  context?: unknown
+) => void | Promise<void>;
 
 /** 从事件名称到处理器列表的映射。 */
 export class EventRegistry {
   private handlers: Map<string, EventHandler[]> = new Map();
 
-  /** 为特定事件名称注册处理器。 */
-  on<T extends AnyEvent = AnyEvent>(eventName: string, handler: EventHandler<T>): void {
+  /**
+   * 为特定事件名称注册处理器。
+   *
+   * 事件名会收窄 handler 的参数类型（见 `EventMap`）。
+   */
+  on<K extends keyof EventMap>(
+    eventName: K,
+    handler: EventHandler<EventMap[K]>
+  ): void;
+  on(eventName: string, handler: EventHandler<AnyEvent>): void;
+  on(eventName: string, handler: EventHandler<AnyEvent>): void {
     if (!this.handlers.has(eventName)) {
       this.handlers.set(eventName, []);
     }
@@ -16,7 +28,12 @@ export class EventRegistry {
   }
 
   /** 移除先前注册的处理器。 */
-  off<T extends AnyEvent = AnyEvent>(eventName: string, handler: EventHandler<T>): void {
+  off<K extends keyof EventMap>(
+    eventName: K,
+    handler: EventHandler<EventMap[K]>
+  ): void;
+  off(eventName: string, handler: EventHandler<AnyEvent>): void;
+  off(eventName: string, handler: EventHandler<AnyEvent>): void {
     const list = this.handlers.get(eventName);
     if (list) {
       const idx = list.indexOf(handler as EventHandler);

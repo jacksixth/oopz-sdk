@@ -65,6 +65,20 @@ export function normalizeMessageParts(
 }
 
 /**
+ * @提及在 Oopz 协议中的文本表示（对齐 Python SDK 的 `(met)xxx(met)` 格式）。
+ */
+export function mentionText(userId: string): string {
+  return ` (met)${userId}(met) `;
+}
+
+/**
+ * @全体在 Oopz 协议中的文本表示（对齐 Python SDK 的 `(met)All(met)` 格式）。
+ */
+export function mentionAllText(): string {
+  return " (met)All(met) ";
+}
+
+/**
  * 根据已解析的 segment 列表构建纯文本内容和附件列表。
  * 调用前必须先解析（上传）图片分段。
  */
@@ -80,10 +94,10 @@ export function buildSegments(
         textParts.push(seg.text);
         break;
       case "mention":
-        textParts.push(`@${seg.userId}`);
+        textParts.push(mentionText(seg.userId));
         break;
       case "mention_all":
-        textParts.push("@all");
+        textParts.push(mentionAllText());
         break;
       case "image":
         if (seg.uploaded) {
@@ -91,7 +105,7 @@ export function buildSegments(
             `![IMAGEw${seg.uploaded.width || 0}h${seg.uploaded.height || 0}](${seg.uploaded.fileKey})`
           );
           attachments.push({
-            attachmentType: "image",
+            attachmentType: "IMAGE",
             fileKey: seg.uploaded.fileKey,
             url: seg.uploaded.url,
             width: seg.uploaded.width,

@@ -11,7 +11,7 @@
  * const bot = new OopzBot(config);
  *
  * bot.on("message", async (event) => {
- *   await event.reply(`Echo: ${event.content}`);
+ *   await event.message.content;
  * });
  *
  * await bot.start();
@@ -32,9 +32,12 @@ export {
   DEFAULT_BASE_URL,
   DEFAULT_WS_URL,
   DEFAULT_APP_VERSION,
+  DEFAULT_AGORA_APP_ID,
+  DEFAULT_REQUEST_TIMEOUT,
   DEFAULT_HEADERS,
   EVENT_SERVER_ID,
   EVENT_AUTH,
+  EVENT_AUTH_RESULT,
   EVENT_CHAT_MESSAGE,
   EVENT_HEARTBEAT,
 } from "./config";
@@ -51,6 +54,7 @@ export type {
 export {
   Signer,
   buildOopzHeaders,
+  buildOopzApiHeaders,
   OopzLoginCredentials,
   saveCredentialsJson,
   loadCredentialsJson,
@@ -71,10 +75,12 @@ export {
   OopzParseError,
   OopzTransportError,
   OopzPasswordLoginError,
+  AUTH_FAILURE_STATUS_CODES,
 } from "./exceptions";
 
 // 客户端
 export { OopzBot, OopzRESTClient, OopzWSClient } from "./client";
+export type { CloseInfo, OopzWSClientOptions } from "./client/ws";
 
 // 服务
 export {
@@ -86,6 +92,7 @@ export {
   Person,
   Moderation,
   Voice,
+  OopzVoiceUnsupportedError,
 } from "./services";
 
 // 事件
@@ -94,7 +101,7 @@ export {
   EventRegistry,
   EventDispatcher,
 } from "./events";
-export type { EventContext, EventHandler } from "./events";
+export type { EventHandler } from "./events";
 
 // 传输层
 export {
@@ -102,6 +109,8 @@ export {
   WebSocketTransport,
   WebSocketClosedError,
   buildProxyUrl,
+  connectThroughProxy,
+  ProxyAgent,
 } from "./transport";
 export type { HttpRequestOptions, HttpResponse, BaseTransport } from "./transport";
 
@@ -130,11 +139,15 @@ export {
   success,
   failure,
   ChannelType,
+  TextMuteInterval,
+  VoiceMuteInterval,
   parseAttachment,
   text,
   mention,
   mentionAll,
   image,
+  mentionText,
+  mentionAllText,
   normalizeMessageParts,
   buildSegments,
 } from "./models";
@@ -149,6 +162,7 @@ export type {
   AreaMembersPage,
   AreaMemberInfo,
   AreaUserDetail,
+  AreaRoleInfo,
   RoleInfo,
   AttachmentType,
   AttachmentBase,
@@ -161,6 +175,7 @@ export type {
   ChannelSetting,
   CreateChannelResult,
   ChannelEdit,
+  ChannelSign,
   VoiceChannelMemberInfo,
   VoiceChannelMembersResult,
   Message as MessageModel,
@@ -175,20 +190,25 @@ export type {
   Friendship,
   FriendshipRequest,
   UserRemarkNamesResponse,
-  TextMuteInterval,
-  VoiceMuteInterval,
   Event,
+  EventMap,
   MessageEvent,
   MessageDeleteEvent,
   ServerIdEvent,
-  ChannelJoinEvent,
-  ChannelLeaveEvent,
-  ChannelUpdateEvent,
-  MemberJoinEvent,
-  MemberLeaveEvent,
-  RoleUpdateEvent,
+  HeartbeatEvent,
+  AuthEvent,
   FriendRequestEvent,
-  FriendAcceptEvent,
+  FriendDeleteEvent,
+  MessageReactionEvent,
+  AreaDisableEvent,
+  ChannelUpdateEvent,
+  ChannelCreateEvent,
+  ChannelDeleteEvent,
+  VoicePresenceEvent,
+  UserUpdateEvent,
+  UserLoginStateEvent,
+  AreaUpdateEvent,
+  RoleChangedEvent,
   AnyEvent,
   TextSegment,
   MentionSegment,

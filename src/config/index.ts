@@ -2,11 +2,19 @@ export {
   DEFAULT_HEADERS,
   EVENT_SERVER_ID,
   EVENT_AUTH,
+  EVENT_AUTH_RESULT,
   EVENT_CHAT_MESSAGE,
   EVENT_HEARTBEAT,
   EVENT_CODE_MAP,
 } from "./constants";
-export { OopzConfig, DEFAULT_BASE_URL, DEFAULT_WS_URL, DEFAULT_APP_VERSION } from "./oopz-config";
+export {
+  OopzConfig,
+  DEFAULT_BASE_URL,
+  DEFAULT_WS_URL,
+  DEFAULT_APP_VERSION,
+  DEFAULT_AGORA_APP_ID,
+  DEFAULT_REQUEST_TIMEOUT,
+} from "./oopz-config";
 export type {
   OopzConfigOptions,
   RequestConfig,

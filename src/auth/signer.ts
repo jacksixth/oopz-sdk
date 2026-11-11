@@ -1,6 +1,6 @@
 import * as crypto from "node:crypto";
-import { v4 as uuidv4 } from "uuid";
 import { OopzConfig } from "../config";
+import { ClientMessageIdGenerator, requestId, timestampMs, timestampUs } from "./ids";
 
 /**
  * Oopz API RSA 签名器（对齐 Python SDK）。
@@ -9,6 +9,7 @@ import { OopzConfig } from "../config";
 export class Signer {
   private config: OopzConfig;
   private privateKeyObj: crypto.KeyObject | null = null;
+  private idGen = new ClientMessageIdGenerator();
 
   constructor(config: OopzConfig) {
     this.config = config;
@@ -69,20 +70,24 @@ export class Signer {
 
   static _warnedMissingKey = false;
 
-  /** 当前毫秒级时间戳（对齐 Python timestamp_ms）。 */
+  /** 当前毫秒级时间戳（Unix epoch，对齐 Python timestamp_ms）。 */
   timestampMs(): string {
-    return String(Math.floor(Date.now()));
+    return timestampMs();
   }
 
-  /** 当前微秒级时间戳（对齐 Python timestamp_us）。 */
+  /**
+   * 当前微秒级时间戳（Unix epoch，对齐 Python timestamp_us）。
+   *
+   * 注意：必须使用 Unix epoch，不能用 `process.hrtime()`——后者是单调时钟，
+   * 起点是系统启动时刻，与服务端期望的 epoch 毫秒完全对不上。
+   */
   timestampUs(): string {
-    const [s, ns] = process.hrtime();
-    return String(Math.floor(s * 1_000_000 + ns / 1_000));
+    return timestampUs();
   }
 
   /** 生成唯一的请求 ID（对齐 Python request_id）。 */
   requestId(): string {
-    return uuidv4();
+    return requestId();
   }
 
   /**
@@ -90,14 +95,16 @@ export class Signer {
    * 格式：timestamp_us % 10^13 * 100 + random(10, 99)
    */
   clientMessageId(): string {
-    const tsUs = Math.floor(Date.now() * 1000);
-    const baseId = tsUs % 10_000_000_000_000;
-    const suffix = Math.floor(Math.random() * 90) + 10;
-    return String(baseId * 100 + suffix);
+    return this.idGen.generate();
   }
 }
 
-/** 构建 Oopz API 请求头（对齐 Python build_oopz_headers）。 */
+/**
+ * 构建 Oopz API 请求头（对齐 Python build_oopz_headers）。
+ *
+ * @param urlPath 用于参与 MD5 的路径（不含 base URL）
+ * @param bodyStr 用于参与 MD5 的请求体字符串
+ */
 export function buildOopzApiHeaders(
   config: OopzConfig,
   signer: Signer,

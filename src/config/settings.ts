@@ -1,6 +1,11 @@
 /** HTTP 请求配置。 */
 export interface RequestConfig {
-  /** 请求超时（毫秒），可以是单个值或 [连接超时, 读取超时]。 */
+  /**
+   * 请求超时（毫秒）。
+   *
+   * - 单个数字：总超时。
+   * - `[连接超时, 读取超时]`：分段超时（对齐 Python SDK 的 `sock_connect` / `sock_read`）。
+   */
   timeout?: number | [number, number];
 }
 
@@ -11,20 +16,27 @@ export interface RetryConfig {
 
 /** 请求频率限制配置。 */
 export interface RateLimitConfig {
+  /** 两次请求之间的最小间隔（秒）。 */
   interval?: number;
 }
 
 /** WebSocket 心跳配置。 */
 export interface HeartbeatConfig {
+  /** 心跳间隔（秒）。 */
   interval?: number;
+  /** 首次重连间隔（秒），后续按指数退避增长。 */
   reconnectInterval?: number;
+  /** 最大重连间隔（秒）。 */
   maxReconnectInterval?: number;
 }
 
 /** 代理配置。 */
 export interface ProxyConfig {
+  /** HTTP 代理地址。 */
   http?: string | null;
+  /** HTTPS 代理地址。 */
   https?: string | null;
+  /** WebSocket 代理地址。 */
   websocket?: string | null;
 }
 
@@ -52,7 +64,7 @@ export interface OopzConfigOptions {
   /** 是否 Web 端（对齐 Python: web）。 */
   web?: boolean;
 
-  /** 是否使用公告样式发送消息。 */
+  /** 是否使用公告样式发送消息（消息会带上 IMPORTANT 标签）。 */
   useAnnouncementStyle?: boolean;
 
   /** 用户信息缓存最大条目数。 */
@@ -71,20 +83,27 @@ export interface OopzConfigOptions {
   areaUserNicknameCacheMaxEntries?: number;
   /** 区域用户昵称缓存 TTL（秒）。 */
   areaUserNicknameCacheTtl?: number;
-  /** 区域成员页面缓存最大条目数。 */
+  /** 区域成员分页缓存最大条目数。 */
   areaMembersPageCacheMaxEntries?: number;
-  /** 区域成员页面缓存 TTL（秒）。 */
+  /** 区域成员分页缓存 TTL（秒）。 */
   areaMembersPageCacheTtl?: number;
 
-  /** 请求超时（毫秒），单个值或 [连接超时, 读取超时]。 */
+  /**
+   * 请求超时（毫秒）。
+   * 与 `request.timeout` 等价，二者同时提供时以 `request.timeout` 为准。
+   */
   requestTimeout?: number | [number, number];
-  /** 请求频率限制间隔（秒）。 */
+
+  /**
+   * 请求间隔限流（秒）。
+   * 与 `rateLimit.interval` 等价，二者同时提供时以 `rateLimit.interval` 为准。
+   */
   rateLimitInterval?: number;
 
   /** Agora App ID（语音功能需要）。 */
   agoraAppId?: string;
 
-  /** 忽略机器人自己发送的消息。 */
+  /** 忽略机器人自己发送的消息（避免自问自答死循环）。 */
   ignoreSelfMessages?: boolean;
   /** 连接后自动订阅已加入的区域。 */
   autoSubscribeJoinedAreas?: boolean;

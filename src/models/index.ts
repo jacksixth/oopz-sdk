@@ -9,6 +9,7 @@ export type {
   AreaMembersPage,
   AreaMemberInfo,
   AreaUserDetail,
+  AreaRoleInfo,
   RoleInfo,
 } from "./area";
 
@@ -29,6 +30,7 @@ export type {
   ChannelSetting,
   CreateChannelResult,
   ChannelEdit,
+  ChannelSign,
   VoiceChannelMemberInfo,
   VoiceChannelMembersResult,
 } from "./channel";
@@ -55,16 +57,29 @@ export { TextMuteInterval, VoiceMuteInterval } from "./moderation";
 
 export type {
   Event,
+  EventMap,
   MessageEvent,
   MessageDeleteEvent,
   ServerIdEvent,
+  HeartbeatEvent,
+  AuthEvent,
+  FriendRequestEvent,
+  FriendDeleteEvent,
+  MessageReactionEvent,
+  AreaDisableEvent,
+  ChannelUpdateEvent,
+  ChannelCreateEvent,
+  ChannelDeleteEvent,
+  VoicePresenceEvent,
+  UserUpdateEvent,
+  UserLoginStateEvent,
+  AreaUpdateEvent,
+  RoleChangedEvent,
   ChannelJoinEvent,
   ChannelLeaveEvent,
-  ChannelUpdateEvent,
   MemberJoinEvent,
   MemberLeaveEvent,
   RoleUpdateEvent,
-  FriendRequestEvent,
   FriendAcceptEvent,
   AnyEvent,
 } from "./event";
@@ -74,6 +89,8 @@ export {
   mention,
   mentionAll,
   image,
+  mentionText,
+  mentionAllText,
   normalizeMessageParts,
   buildSegments,
 } from "./segment";

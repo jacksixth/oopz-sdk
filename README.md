@@ -224,23 +224,44 @@ setupLogging("DEBUG");
 | `message.private.edit` | 私信消息编辑 | `MessageEvent` |
 | `recall` | 频道消息撤回 | `MessageDeleteEvent` |
 | `recall.private` | 私信消息撤回 | `MessageDeleteEvent` |
-| `channel.join` | 用户加入频道 | `ChannelJoinEvent` |
-| `channel.leave` | 用户离开频道 | `ChannelLeaveEvent` |
-| `channel.update` | 频道信息变更 | `ChannelUpdateEvent` |
-| `member.join` | 成员加入区域 | `MemberJoinEvent` |
-| `member.leave` | 成员离开区域 | `MemberLeaveEvent` |
+| `message.reaction` | 消息表情 | `MessageReactionEvent` |
+| `channel.update` | 频道设置变更 | `ChannelUpdateEvent` |
+| `channel.create` | 频道创建 | `ChannelCreateEvent` |
+| `channel.delete` | 频道删除 | `ChannelDeleteEvent` |
 | `voice.enter` | 进入语音频道 | `VoicePresenceEvent` |
 | `voice.leave` | 离开语音频道 | `VoicePresenceEvent` |
-| `role.update` | 身份组变化 | `RoleUpdateEvent` |
-| `friend.request` | 好友请求 | `FriendRequestEvent` |
-| `friend.accept` | 好友请求通过 | `FriendAcceptEvent` |
+| `user.update` | 用户资料变更 | `UserUpdateEvent` |
+| `user.login_state` | 用户登录状态变更 | `UserLoginStateEvent` |
+| `area.update` | 域信息变更 | `AreaUpdateEvent` |
+| `role.change` | 身份组变化 | `RoleChangedEvent` |
+| `friend.request` | 收到好友请求 | `FriendRequestEvent` |
+| `friend.delete` | 好友被删除 | `FriendDeleteEvent` |
+| `moderation.text_ban` | 域内禁言 | `AreaDisableEvent` |
+| `moderation.voice_ban` | 域内禁麦 | `AreaDisableEvent` |
 | `server_id` | 服务端 ID 分配 | `ServerIdEvent` |
+| `auth` | 鉴权结果 | `AuthEvent` |
+| `heartbeat` | 心跳 | `HeartbeatEvent` |
+| `unknown` | 未映射事件码的兜底 | `AnyEvent` |
 | `*` | 通配符，匹配所有事件 | `AnyEvent` |
+
+事件名会决定处理器的参数类型，因此 `event.message.content` 这类访问可以直接通过类型检查，无需手动断言：
+
+```ts
+bot.on("message", (event) => {
+  // event 的类型是 MessageEvent，event.message 可直接访问
+  console.log(event.message.content);
+});
+
+bot.on("voice.enter", (event) => {
+  // event 的类型是 VoicePresenceEvent
+  console.log(event.persons, event.activeNum);
+});
+```
+
+若需要订阅「协议中没有对应事件码」的自定义事件，可以用 `bot.on("任意名字", handler)`，此时参数类型为 `AnyEvent`。
 
 若需要 `voice` 系列事件，需要在`config`中将`autoSubscribeJoinedAreas`置为`true`，这将在初始化时就订阅所有已加入域的事件。 
 若是只想订阅已加入的部分域，请使用`bot.ws.sendSubscribeAreaEvents(areaIds)`订阅指定区域的事件 
-
----
 
 ## 🧩 Service 列表
 
@@ -249,11 +270,16 @@ setupLogging("DEBUG");
 | `messages` | `bot.messages` | 发送/回复/编辑/撤回消息、私信 |
 | `media` | `bot.media` | 上传图片/文件 |
 | `areas` | `bot.areas` | 列出区域、查询成员 |
-| `channels` | `bot.channels` | 创建/编辑/删除频道 |
+| `channels` | `bot.channels` | 创建/编辑/删除频道、进入/退出语音频道 |
 | `person` | `bot.person` | 用户信息、好友管理 |
 | `members` | `bot.members` | `person` 的别名 |
 | `moderation` | `bot.moderation` | 踢人/禁言/封禁 |
-| `voice` | `bot.voice`（内部） | 语音频道进出、ChannelSign 管理 |
+| `voice` | `bot.voice` | 加入/退出语音频道、ChannelSign 管理 |
+
+> ⚠️ **语音播放限制**：Oopz 的语音播放依赖 Agora 浏览器运行时（Python SDK 通过 headless 浏览器实现）。
+> Node.js 下 `bot.voice.join()` / `leave()` 可正常工作（走服务端 `enter_channel` / `removeFromChannel`），
+> 但 `playUrl` / `playFile` / `playBytes` / `pause` / `seek` 等播放方法会抛出
+> `OopzVoiceUnsupportedError`，而不是返回一个假的成功结果。
 
 ## 🔧 配置选项
 
@@ -285,6 +311,7 @@ const config = new OopzConfig({
   },
 
   // ── 代理 ──
+  // 通过 HTTP 代理时使用 CONNECT 隧道；https/wss 走 proxy.https ?? proxy.http。
   proxy: {
     http: "http://127.0.0.1:7890",
     https: null,
@@ -292,10 +319,13 @@ const config = new OopzConfig({
   },
 
   // ── 速率限制 ──
-  rateLimit: { interval: 0 },
+  // 与顶层的 rateLimitInterval 等价，二者同时提供时以 rateLimit.interval 为准。
+  rateLimit: { interval: 0 },    // 两次请求之间的最小间隔（秒）
 
   // ── 请求超时（毫秒） ──
-  requestTimeout: [10_000, 30_000],  // [连接超时, 读取超时]
+  // 与 request.timeout 等价，二者同时提供时以 request.timeout 为准。
+  // 单个数字表示总超时；[连接超时, 读取超时] 表示分段超时。
+  requestTimeout: [10_000, 30_000],
 
   // ── 缓存 ──
   userinfoCacheMaxEntries: 1000,
@@ -304,14 +334,14 @@ const config = new OopzConfig({
   areaChannelsCacheTtl: 60,
 
   // ── 机器人行为 ──
-  ignoreSelfMessages: true,//忽略机器人自身发言  -- 可能无效
-  autoSubscribeJoinedAreas: false,//是否自动订阅已加入域的事件 
-  useAnnouncementStyle: false,//发言是否使用公告样式
+  ignoreSelfMessages: true,          // 忽略机器人自身发言，避免自问自答死循环
+  autoSubscribeJoinedAreas: false,   // 是否自动订阅已加入域的事件
+  useAnnouncementStyle: false,       // 发言是否使用公告样式（附加 IMPORTANT 标签）
 
+  // ── 调试 ──
+  debug: false,                       // 打开调试日志，等价于 setupLogging("DEBUG")
 });
 ```
-
----
 
 ## 🧪 示例项目
 
@@ -332,6 +362,14 @@ const config = new OopzConfig({
 node test/01-echo-bot.js
 ```
 
+### 单元测试
+
+```bash
+npm test
+```
+
+测试位于 `test/unit/`，覆盖签名时间戳、事件解析与分发、缓存淘汰、传输层状态码处理等核心逻辑。
+
 ---
 
 ## 🧱 项目结构
@@ -339,11 +377,10 @@ node test/01-echo-bot.js
 ```
 src/
 ├── index.ts              # 主入口，统一导出
-├── version.ts            # SDK 版本号
+├── version.ts            # SDK 版本号（从 package.json 读取）
 ├── logger.ts             # 日志系统
-├── utils.ts              # 通用工具函数
 ├── config/               # 配置（端点、凭证、设置）
-├── auth/                 # 认证（签名、JWT、请求头、登录）
+├── auth/                 # 认证（签名、JWT、请求头、凭据）
 ├── client/               # 客户端（Bot 入口、REST、WebSocket）
 ├── services/             # 服务层（消息、媒体、区域、频道、用户、管理、语音）
 ├── events/               # 事件系统（解析、注册、分发、上下文）
