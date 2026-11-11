@@ -7,7 +7,13 @@ on:
 
 permissions:
   contents: write
+  # npm Trusted Publishing (OIDC)：无需在仓库里存 npm token
   id-token: write
+
+# 同一时间只跑一个发布任务，避免 tag 密集推送时互相覆盖 npm dist-tag
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build-and-release:
@@ -31,31 +37,77 @@ jobs:
           node -v
           npm -v
 
-      - name: Install dependencies
-        run: npm ci
-
       - name: Get version from tag
         id: version
         run: |
           VERSION="${GITHUB_REF#refs/tags/v}"
+          # 提前校验，避免把非法版本号带进后续步骤导致难懂的报错。
+          # 数字段不允许前导零（npm 拒绝 01.2.3 这类版本）。
+          if ! echo "$VERSION" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
+            echo "::error::Invalid version in tag '$GITHUB_REF': '$VERSION'. Expected vX.Y.Z[-pre][+build]"
+            exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Sync version to package.json
         run: |
-          npm version ${{ steps.version.outputs.version }} --no-git-tag-version
+          # npm version 在目标版本与当前版本相同时会报 "Version not changed"，
+          # 这里直接改写 package.json，行为稳定且可重复执行。
+          node -e "
+            const fs = require('fs');
+            const version = '${{ steps.version.outputs.version }}';
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf-8'));
+            pkg.version = version;
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+          # 同步 lockfile 里的版本号，避免 npm ci / npm publish 时出现版本不一致
+          node -e "
+            const fs = require('fs');
+            const version = '${{ steps.version.outputs.version }}';
+            const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf-8'));
+            lock.version = version;
+            if (lock.packages && lock.packages['']) lock.packages[''].version = version;
+            fs.writeFileSync('package-lock.json', JSON.stringify(lock, null, 2) + '\n');
+          "
 
-      - name: Build
-        run: npm run build
+      - name: Install dependencies
+        run: npm ci
 
       - name: Verify package
         run: |
           npm pkg get name
           npm pkg get version
+          # 确认 package.json 的版本与 tag 一致，防止发布出错版本
+          CURRENT="$(npm pkg get version | tr -d '"')"
+          EXPECTED="${{ steps.version.outputs.version }}"
+          if [ "$CURRENT" != "$EXPECTED" ]; then
+            echo "::error::Version mismatch: package.json=$CURRENT, tag=$EXPECTED"
+            exit 1
+          fi
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
 
       - name: Package
         run: npm pack
 
+      - name: Check if version is already published
+        id: check
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          # npm view 在版本不存在时返回非零退出码，这里显式判断避免误判
+          if npm view "oopz-sdk@$VERSION" version > /dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "Version $VERSION is already published on npm, skipping publish."
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish to npm
+        if: steps.check.outputs.published != 'true'
         run: npm publish --provenance --access public
 
       - name: Create GitHub Release
@@ -63,5 +115,6 @@ jobs:
         with:
           name: v${{ steps.version.outputs.version }}
           generate_release_notes: true
+          fail_on_unmatched_files: false
           files: |
             *.tgz
